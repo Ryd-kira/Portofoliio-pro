@@ -6,21 +6,29 @@
 <meta name="robots" content="noindex">
 <title>Administration</title>
 <style>
-:root{--bg:#090c11;--panel:#10151c;--line:#232b36;--text:#ebe8e1;--mut:#9ca6b3;--acc:#4f8cff;color-scheme:dark}
+:root{--bg:#090c11;--panel:#10151c;--line:#232b36;--text:#ebe8e1;--mut:#9ca6b3;--acc:#4f8cff;--cy:#35c6d4;color-scheme:dark}
+*{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:720px;margin:0 auto;padding:32px 20px}
-h1{font-size:28px;margin:0 0 24px}
+main{max-width:760px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:28px;margin:0 0 16px}
 h2{font-size:20px;margin:0 0 12px}
 h3{font-size:16px;margin:0}
-section,article,form{border-top:1px solid var(--line);padding:20px 0}
 a{color:var(--acc)}
-input,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:9px 12px}
-button{cursor:pointer;margin-right:8px}
+input,select,textarea,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:9px 12px}
+input:not([type=checkbox]),select,textarea{width:100%}
+textarea{resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--cy);outline:0}
+button{cursor:pointer;margin:0 8px 8px 0}
 button:hover{border-color:var(--acc)}
-label{display:grid;gap:6px;color:var(--mut);margin-bottom:12px}
+button[aria-pressed=true]{border-color:var(--cy)}
+label{display:grid;gap:6px;color:var(--mut);margin-bottom:14px}
+label:has(input[type=checkbox]){display:flex;align-items:center;gap:10px}
+article,section,form{border-top:1px solid var(--line);padding:18px 0}
+#tabs{display:flex;flex-wrap:wrap;margin-bottom:12px}
 p{margin:0 0 10px}
-small{color:var(--mut)}
+.mut,small{color:var(--mut)}
 article p{white-space:pre-wrap}
+img{display:block;margin:0 0 12px;border:1px solid var(--line);border-radius:4px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -35,77 +43,174 @@ article p{white-space:pre-wrap}
 </form>
 
 <div id="app" hidden>
-<section>
-<h2>CV (PDF)</h2>
-<p id="cvs" role="status"></p>
-<input type="file" id="cvf" accept="application/pdf">
-<button type="button" id="cvd" hidden>Supprimer le CV</button>
-</section>
-<section>
-<h2>Photo</h2>
-<p><a href="/#admin">Gérer la photo sur la page d’accueil</a></p>
-</section>
-<section>
-<h2>Messages</h2>
-<div id="ml"></div>
-</section>
+<div id="tabs"></div>
+<p id="seed" hidden>Le contenu du site n’a pas encore été importé dans la base. <button type="button" id="seedb">Importer le contenu actuel</button></p>
+<p id="msg" class="mut" role="status"></p>
+<div id="panel"></div>
 <button type="button" id="out">Se déconnecter</button>
 </div>
 </main>
 <script>
 const $ = (i) => document.getElementById(i);
 const api = (p, o = {}) => fetch("/api/" + p, { credentials: "same-origin", ...o });
+const J = { "Content-Type": "application/json" };
+const BIN = { "Content-Type": "application/octet-stream" };
+const say = (t) => { $("msg").textContent = t; };
+// Tout est construit avec des propriétés DOM (jamais de HTML brut) : le contenu reçu reste du texte.
+const h = (tag, props = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) { if (k in e) e[k] = v; else e.setAttribute(k, v); }
+  e.append(...kids);
+  return e;
+};
+const TABS = [["projects", "Projets"], ["skills", "Compétences"], ["experiences", "Parcours"], ["settings", "Textes"], ["files", "Fichiers"], ["messages", "Messages"]];
+let META, TAB = "projects", edit = null;
 
-async function load() {
-  const r = await api("messages");
+async function start() {
+  const r = await api("admin?r=meta");
   if (r.status === 401) { $("lf").hidden = false; $("app").hidden = true; return; }
+  META = await r.json();
   $("lf").hidden = true; $("app").hidden = false;
-  const rows = await r.json();
-  const box = $("ml");
-  box.replaceChildren();
-  if (!rows.length) box.textContent = "Aucun message.";
-  rows.forEach((m) => {
-    const a = document.createElement("article");
-    const h = document.createElement("h3");
-    h.textContent = m.name + " (" + m.email + ")";
-    const t = document.createElement("p");
-    t.textContent = m.message; // texte brut : les messages ne sont jamais interprétés
-    const s = document.createElement("small");
-    s.textContent = new Date(m.created_at).toLocaleString("fr-FR") + ", " + (m.status === "new" ? "nouveau" : "lu");
-    a.append(h, t, s, document.createElement("br"));
-    [["read", "Marquer lu"], ["archived", "Archiver"]].forEach(([st, label]) => {
-      const b = document.createElement("button");
-      b.textContent = label;
-      b.onclick = async () => {
-        await api("messages", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, status: st }) });
-        load();
-      };
-      a.append(b);
-    });
-    box.append(a);
+  const st = await (await api("admin?r=settings")).json();
+  $("seed").hidden = !!st.seeded;
+  tabs(); show();
+}
+function tabs() {
+  $("tabs").replaceChildren(...TABS.map(([k, l]) => h("button", { type: "button", "aria-pressed": String(k === TAB), onclick: () => { TAB = k; edit = null; say(""); tabs(); show(); } }, l)));
+}
+function show() {
+  if (["projects", "skills", "experiences"].includes(TAB)) return list(TAB);
+  if (TAB === "settings") return settings();
+  if (TAB === "files") return files();
+  return messages();
+}
+
+async function list(res) {
+  const R = META.resources[res], p = $("panel");
+  p.replaceChildren();
+  if (edit !== null) { p.append(form(res, edit)); return; }
+  const rows = await (await api("admin?r=" + res)).json();
+  p.append(h("button", { type: "button", onclick: () => { edit = {}; show(); } }, "Ajouter"));
+  if (!rows.length) p.append(h("p", { className: "mut" }, "Aucun élément."));
+  rows.forEach((row) => p.append(h("article", {},
+    h("h3", {}, row[R.title] + (row.published ? "" : " (masqué)")),
+    h("button", { type: "button", onclick: () => { edit = row; show(); } }, "Modifier"),
+    confirmBtn("Supprimer", async () => { const r = await api(`admin?r=${res}&id=${row.id}`, { method: "DELETE" }); say(r.ok ? "Supprimé." : "Suppression impossible."); show(); }))));
+}
+function confirmBtn(label, action) {
+  const b = h("button", { type: "button" }, label);
+  let armed = 0;
+  b.onclick = () => {
+    if (!armed) { armed = 1; b.textContent = "Confirmer"; setTimeout(() => { armed = 0; b.textContent = label; }, 4000); return; }
+    armed = 0; b.textContent = label; action();
+  };
+  return b;
+}
+function form(res, row) {
+  const R = META.resources[res], f = h("form");
+  R.fields.forEach((fd) => {
+    const v = row[fd.name];
+    let inp;
+    if (fd.type === "textarea" || fd.type === "lines") inp = h("textarea", { name: fd.name, rows: fd.type === "lines" ? 5 : 4, value: fd.type === "lines" ? (v || []).join("\n") : (v || "") });
+    else if (fd.type === "select") { inp = h("select", { name: fd.name }); fd.options.forEach(([k, l]) => inp.append(h("option", { value: k, selected: k === v }, l))); }
+    else if (fd.type === "bool") inp = h("input", { type: "checkbox", name: fd.name, checked: row.id ? !!v : fd.name === "published" });
+    else inp = h("input", { type: fd.type === "int" ? "number" : "text", name: fd.name, value: v ?? (fd.type === "int" ? 0 : "") });
+    f.append(h("label", {}, fd.type === "bool" ? "" : fd.label, inp, fd.type === "bool" ? fd.label : ""));
   });
-  const c = await api("cv", { method: "HEAD" });
-  $("cvs").textContent = c.ok ? "Un CV est en ligne." : "Aucun CV en ligne.";
-  $("cvd").hidden = !c.ok;
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {};
+    R.fields.forEach((fd) => { const el = f.elements[fd.name]; body[fd.name] = fd.type === "bool" ? el.checked : fd.type === "int" ? Number(el.value) : el.value; });
+    const r = await api(row.id ? `admin?r=${res}&id=${row.id}` : `admin?r=${res}`, { method: row.id ? "PUT" : "POST", headers: J, body: JSON.stringify(body) });
+    if (r.ok) { edit = null; say("Enregistré."); show(); } else { const j = await r.json().catch(() => ({})); say(j.error || "Enregistrement impossible."); }
+  };
+  f.append(h("button", { type: "submit" }, "Enregistrer"), h("button", { type: "button", onclick: () => { edit = null; show(); } }, "Annuler"));
+  return f;
+}
+
+async function settings() {
+  const v = await (await api("admin?r=settings")).json(), p = $("panel"), f = h("form");
+  p.replaceChildren();
+  META.settings.forEach(([k, l, t]) => f.append(h("label", {}, l, t === "textarea" ? h("textarea", { name: k, rows: 4, value: v[k] || "" }) : h("input", { name: k, type: "text", value: v[k] || "" }))));
+  f.append(h("p", { className: "mut" }, "Un champ vide rétablit le texte par défaut du site."), h("button", { type: "submit" }, "Enregistrer"));
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const values = {};
+    META.settings.forEach(([k]) => { values[k] = f.elements[k].value; });
+    const r = await api("admin?r=settings", { method: "PUT", headers: J, body: JSON.stringify({ values }) });
+    say(r.ok ? "Enregistré." : "Enregistrement impossible.");
+  };
+  p.append(f);
+}
+
+async function files() {
+  const p = $("panel");
+  p.replaceChildren();
+  const delFile = (k) => confirmBtn("Supprimer", async () => { await api(k, { method: "DELETE" }); say("Supprimé."); files(); });
+  const cv = await api("cv", { method: "HEAD" });
+  const s1 = h("section", {}, h("h2", {}, "CV (PDF)"), h("p", {}, cv.ok ? "Un CV est en ligne." : "Aucun CV en ligne."));
+  s1.append(h("input", { type: "file", accept: "application/pdf", onchange: async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = await api("cv", { method: "PUT", headers: BIN, body: f });
+    say(r.ok ? "CV enregistré." : "Échec : un PDF de 4 Mo maximum est requis.");
+    files();
+  } }));
+  if (cv.ok) s1.append(delFile("cv"));
+  const ph = await api("photo", { method: "HEAD" });
+  const s2 = h("section", {}, h("h2", {}, "Photo"));
+  if (ph.ok) s2.append(h("img", { src: "/api/photo?v=" + Date.now(), alt: "Photo actuelle", width: 160 }));
+  else s2.append(h("p", {}, "Aucune photo en ligne."));
+  s2.append(h("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onchange: upPhoto }));
+  if (ph.ok) s2.append(delFile("photo"));
+  p.append(s1, s2);
+}
+async function upPhoto(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(f.type) || f.size > 8e6) { say("Image JPEG, PNG ou WebP de 8 Mo maximum."); return; }
+  try {
+    const bm = await createImageBitmap(f, { imageOrientation: "from-image" });
+    const k = Math.min(1, 900 / Math.max(bm.width, bm.height)), c = document.createElement("canvas");
+    c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k);
+    c.getContext("2d").drawImage(bm, 0, 0, c.width, c.height);
+    const b = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.86));
+    const r = await api("photo", { method: "PUT", headers: BIN, body: b });
+    say(r.ok ? "Photo enregistrée." : "Échec de l’enregistrement.");
+    files();
+  } catch (_) { say("Image illisible."); }
+}
+
+async function messages() {
+  const p = $("panel");
+  p.replaceChildren();
+  const rows = await (await api("messages")).json();
+  if (!rows.length) p.append(h("p", { className: "mut" }, "Aucun message."));
+  rows.forEach((m) => {
+    const a = h("article", {}, h("h3", {}, m.name + " (" + m.email + ")"), h("p", {}, m.message),
+      h("small", {}, new Date(m.created_at).toLocaleString("fr-FR") + ", " + (m.status === "new" ? "nouveau" : "lu")), h("br"));
+    [["read", "Marquer lu"], ["archived", "Archiver"]].forEach(([st, l]) => a.append(h("button", { type: "button", onclick: async () => {
+      await api("messages", { method: "PATCH", headers: J, body: JSON.stringify({ id: m.id, status: st }) });
+      messages();
+    } }, l)));
+    p.append(a);
+  });
 }
 
 $("lf").onsubmit = async (e) => {
   e.preventDefault();
   $("le").textContent = "";
-  const r = await api("login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) });
+  const r = await api("login", { method: "POST", headers: J, body: JSON.stringify({ password: $("pw").value }) });
   $("pw").value = "";
-  if (r.ok) load(); else $("le").textContent = "Mot de passe incorrect.";
+  if (r.ok) start(); else $("le").textContent = "Mot de passe incorrect.";
 };
-$("out").onclick = async () => { await api("login", { method: "DELETE" }); load(); };
-$("cvf").onchange = async (e) => {
-  const f = e.target.files[0];
-  e.target.value = "";
-  if (!f) return;
-  const r = await api("cv", { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: f });
-  if (r.ok) load(); else $("cvs").textContent = "Échec : il faut un fichier PDF de 4 Mo maximum.";
+$("out").onclick = async () => { await api("login", { method: "DELETE" }); start(); };
+$("seedb").onclick = async () => {
+  const r = await api("admin?r=seed", { method: "POST" });
+  say(r.ok ? "Contenu importé." : "Import impossible (déjà fait ?).");
+  start();
 };
-$("cvd").onclick = async () => { await api("cv", { method: "DELETE" }); load(); };
-load();
+start();
 </script>
 </body>
 </html>
