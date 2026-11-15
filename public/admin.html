@@ -30,6 +30,8 @@ p{margin:0 0 10px}
 article p{white-space:pre-wrap}
 img{display:block;margin:0 0 12px;border:1px solid var(--line);border-radius:4px}
 [hidden]{display:none!important}
+#msg:empty{display:none}
+#msg,#msg.mut{position:fixed;left:12px;right:12px;bottom:12px;max-width:720px;margin:0 auto;background:var(--panel);border:1px solid var(--acc);border-radius:6px;padding:10px 14px;z-index:5;color:var(--text)}
 </style>
 </head>
 <body>
@@ -55,7 +57,8 @@ const $ = (i) => document.getElementById(i);
 const api = (p, o = {}) => fetch("/api/" + p, { credentials: "same-origin", ...o });
 const J = { "Content-Type": "application/json" };
 const BIN = { "Content-Type": "application/octet-stream" };
-const say = (t) => { $("msg").textContent = t; };
+let mt;
+const say = (t) => { $("msg").textContent = t; clearTimeout(mt); if (t) mt = setTimeout(() => { $("msg").textContent = ""; }, 7000); };
 // Tout est construit avec des propriétés DOM (jamais de HTML brut) : le contenu reçu reste du texte.
 const h = (tag, props = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -123,12 +126,20 @@ function form(res, row) {
     R.fields.forEach((fd) => { const el = f.elements[fd.name]; body[fd.name] = fd.type === "bool" ? el.checked : fd.type === "int" ? Number(el.value) : el.value; });
     const r = await api(row.id ? `admin?r=${res}&id=${row.id}` : `admin?r=${res}`, { method: row.id ? "PUT" : "POST", headers: J, body: JSON.stringify(body) });
     if (r.ok) {
-      if (res === "collaborators" && !row.id) { const j = await r.json(); edit = { ...body, id: j.id }; say("Enregistré. Tu peux maintenant ajouter la photo."); }
+      if (res === "collaborators" && !row.id) {
+        const j = await r.json();
+        const file = f.elements.photo_file && f.elements.photo_file.files[0];
+        let ph = false;
+        if (file) { try { ph = (await api("collab-photo?id=" + j.id, { method: "PUT", headers: BIN, body: await toJpeg(file, 600) })).ok; } catch (_) {} }
+        edit = { ...body, id: j.id, has_photo: ph };
+        say(file && !ph ? "Collaborateur enregistré, mais la photo n’a pas pu être ajoutée : réessaie ci-dessous." : "Enregistré.");
+      }
       else { edit = null; say("Enregistré."); }
       show();
     } else { const j = await r.json().catch(() => ({})); say(j.error || "Enregistrement impossible."); }
   };
   if (res === "collaborators" && row.id) f.append(collabPhoto(row));
+  else if (res === "collaborators") f.append(h("label", {}, "Photo (facultative, ajoutée à l’enregistrement)", h("input", { type: "file", name: "photo_file", accept: "image/jpeg,image/png,image/webp" })));
   f.append(h("button", { type: "submit" }, "Enregistrer"), h("button", { type: "button", onclick: () => { edit = null; show(); } }, "Annuler"));
   return f;
 }
