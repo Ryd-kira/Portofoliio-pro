@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Administration</title>
+<style>
+:root{--bg:#090c11;--panel:#10151c;--line:#232b36;--text:#ebe8e1;--mut:#9ca6b3;--acc:#4f8cff;color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:720px;margin:0 auto;padding:32px 20px}
+h1{font-size:28px;margin:0 0 24px}
+h2{font-size:20px;margin:0 0 12px}
+h3{font-size:16px;margin:0}
+section,article,form{border-top:1px solid var(--line);padding:20px 0}
+a{color:var(--acc)}
+input,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:9px 12px}
+button{cursor:pointer;margin-right:8px}
+button:hover{border-color:var(--acc)}
+label{display:grid;gap:6px;color:var(--mut);margin-bottom:12px}
+p{margin:0 0 10px}
+small{color:var(--mut)}
+article p{white-space:pre-wrap}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>Administration</h1>
+
+<form id="lf" hidden>
+<label>Mot de passe<input type="password" id="pw" autocomplete="current-password" required></label>
+<button type="submit">Se connecter</button>
+<p id="le" role="status"></p>
+</form>
+
+<div id="app" hidden>
+<section>
+<h2>CV (PDF)</h2>
+<p id="cvs" role="status"></p>
+<input type="file" id="cvf" accept="application/pdf">
+<button type="button" id="cvd" hidden>Supprimer le CV</button>
+</section>
+<section>
+<h2>Photo</h2>
+<p><a href="/#admin">Gérer la photo sur la page d’accueil</a></p>
+</section>
+<section>
+<h2>Messages</h2>
+<div id="ml"></div>
+</section>
+<button type="button" id="out">Se déconnecter</button>
+</div>
+</main>
+<script>
+const $ = (i) => document.getElementById(i);
+const api = (p, o = {}) => fetch("/api/" + p, { credentials: "same-origin", ...o });
+
+async function load() {
+  const r = await api("messages");
+  if (r.status === 401) { $("lf").hidden = false; $("app").hidden = true; return; }
+  $("lf").hidden = true; $("app").hidden = false;
+  const rows = await r.json();
+  const box = $("ml");
+  box.replaceChildren();
+  if (!rows.length) box.textContent = "Aucun message.";
+  rows.forEach((m) => {
+    const a = document.createElement("article");
+    const h = document.createElement("h3");
+    h.textContent = m.name + " (" + m.email + ")";
+    const t = document.createElement("p");
+    t.textContent = m.message; // texte brut : les messages ne sont jamais interprétés
+    const s = document.createElement("small");
+    s.textContent = new Date(m.created_at).toLocaleString("fr-FR") + ", " + (m.status === "new" ? "nouveau" : "lu");
+    a.append(h, t, s, document.createElement("br"));
+    [["read", "Marquer lu"], ["archived", "Archiver"]].forEach(([st, label]) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.onclick = async () => {
+        await api("messages", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, status: st }) });
+        load();
+      };
+      a.append(b);
+    });
+    box.append(a);
+  });
+  const c = await api("cv", { method: "HEAD" });
+  $("cvs").textContent = c.ok ? "Un CV est en ligne." : "Aucun CV en ligne.";
+  $("cvd").hidden = !c.ok;
+}
+
+$("lf").onsubmit = async (e) => {
+  e.preventDefault();
+  $("le").textContent = "";
+  const r = await api("login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) });
+  $("pw").value = "";
+  if (r.ok) load(); else $("le").textContent = "Mot de passe incorrect.";
+};
+$("out").onclick = async () => { await api("login", { method: "DELETE" }); load(); };
+$("cvf").onchange = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  const r = await api("cv", { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: f });
+  if (r.ok) load(); else $("cvs").textContent = "Échec : il faut un fichier PDF de 4 Mo maximum.";
+};
+$("cvd").onclick = async () => { await api("cv", { method: "DELETE" }); load(); };
+load();
+</script>
+</body>
+</html>
