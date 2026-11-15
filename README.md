@@ -10,6 +10,7 @@ Site en une page (`public/index.html`), fonctions serveur Vercel (`api/`) et bas
 - `api/_schema.js` : liste des champs modifiables. Ajouter un champ commence ici, puis dans la base.
 - `api/_defaults.js` : contenu initial, importé en un clic depuis le back-office.
 - `api/contact.js` : enregistre les messages du formulaire.
+- `api/collab-photo.js` : photos des collaborateurs (lecture publique, ajout et suppression par l'administrateur).
 - `api/photo.js`, `api/cv.js` : lecture publique, ajout et suppression par l'administrateur.
 - `api/login.js`, `api/messages.js` : connexion administrateur et gestion des messages.
 - `db/schema.sql` : toutes les tables (déjà appliquées sur Neon).
@@ -25,7 +26,7 @@ Site en une page (`public/index.html`), fonctions serveur Vercel (`api/`) et bas
 ## Utilisation sans coder
 1. Ouvrir `/admin.html` et se connecter avec `ADMIN_PASSWORD`.
 2. Première fois seulement : cliquer sur « Importer le contenu actuel ». Les projets, compétences, parcours et textes du site passent dans la base.
-3. Onglets : Projets, Compétences, Parcours (ajouter, modifier, masquer, supprimer, réordonner), Textes (accroche, à propos, centres d'intérêt, devise), Fichiers (CV en PDF et photo) et Messages.
+3. Onglets : Projets, Compétences, Parcours et Collaborateurs (prénom, nom, photo, liens LinkedIn, portfolio et GitHub ; ajouter, modifier, masquer, supprimer, réordonner), Textes (accroche, à propos, centres d'intérêt, devise), Fichiers (CV en PDF et photo) et Messages.
 4. Chaque enregistrement apparaît sur le site en quelques secondes, sans redéploiement.
 - Le bouton « Télécharger mon CV » apparaît dès qu'un CV est en ligne et pointe toujours vers la dernière version.
 - La mention « à confirmer » d'un projet disparaît quand on coche « État confirmé ».
