@@ -80,3 +80,27 @@ CREATE POLICY app_experiences ON public.experiences FOR ALL TO portfolio_app USI
 CREATE POLICY app_settings ON public.settings FOR ALL TO portfolio_app USING (true) WITH CHECK (true);
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.projects, public.skills, public.experiences, public.settings TO portfolio_app;
 REVOKE DELETE ON public.messages FROM portfolio_app;
+
+-- Collaborateurs (photo dans une table séparée pour ne pas alourdir les listes)
+CREATE TABLE public.collaborators (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  first_name text NOT NULL CHECK (char_length(first_name) BETWEEN 1 AND 60),
+  last_name text NOT NULL CHECK (char_length(last_name) BETWEEN 1 AND 60),
+  linkedin_url text CHECK (linkedin_url IS NULL OR (linkedin_url ~ '^https://[^[:space:]]+$' AND char_length(linkedin_url) <= 300)),
+  portfolio_url text CHECK (portfolio_url IS NULL OR (portfolio_url ~ '^https://[^[:space:]]+$' AND char_length(portfolio_url) <= 300)),
+  github_url text CHECK (github_url IS NULL OR (github_url ~ '^https://[^[:space:]]+$' AND char_length(github_url) <= 300)),
+  position integer NOT NULL DEFAULT 0 CHECK (position BETWEEN 0 AND 9999),
+  published boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.collaborator_photos (
+  collaborator_id uuid PRIMARY KEY REFERENCES public.collaborators(id) ON DELETE CASCADE,
+  data bytea NOT NULL CHECK (octet_length(data) BETWEEN 1 AND 500000),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.collaborators ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.collaborator_photos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY app_collaborators ON public.collaborators FOR ALL TO portfolio_app USING (true) WITH CHECK (true);
+CREATE POLICY app_collaborator_photos ON public.collaborator_photos FOR ALL TO portfolio_app USING (true) WITH CHECK (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.collaborators, public.collaborator_photos TO portfolio_app;
