@@ -63,7 +63,7 @@ const h = (tag, props = {}, ...kids) => {
   e.append(...kids);
   return e;
 };
-const TABS = [["projects", "Projets"], ["skills", "Compétences"], ["experiences", "Parcours"], ["settings", "Textes"], ["files", "Fichiers"], ["messages", "Messages"]];
+const TABS = [["projects", "Projets"], ["skills", "Compétences"], ["experiences", "Parcours"], ["collaborators", "Collaborateurs"], ["settings", "Textes"], ["files", "Fichiers"], ["messages", "Messages"]];
 let META, TAB = "projects", edit = null;
 
 async function start() {
@@ -79,7 +79,7 @@ function tabs() {
   $("tabs").replaceChildren(...TABS.map(([k, l]) => h("button", { type: "button", "aria-pressed": String(k === TAB), onclick: () => { TAB = k; edit = null; say(""); tabs(); show(); } }, l)));
 }
 function show() {
-  if (["projects", "skills", "experiences"].includes(TAB)) return list(TAB);
+  if (["projects", "skills", "experiences", "collaborators"].includes(TAB)) return list(TAB);
   if (TAB === "settings") return settings();
   if (TAB === "files") return files();
   return messages();
@@ -93,7 +93,7 @@ async function list(res) {
   p.append(h("button", { type: "button", onclick: () => { edit = {}; show(); } }, "Ajouter"));
   if (!rows.length) p.append(h("p", { className: "mut" }, "Aucun élément."));
   rows.forEach((row) => p.append(h("article", {},
-    h("h3", {}, row[R.title] + (row.published ? "" : " (masqué)")),
+    h("h3", {}, [].concat(R.title).map((k) => row[k]).join(" ") + (row.published ? "" : " (masqué)")),
     h("button", { type: "button", onclick: () => { edit = row; show(); } }, "Modifier"),
     confirmBtn("Supprimer", async () => { const r = await api(`admin?r=${res}&id=${row.id}`, { method: "DELETE" }); say(r.ok ? "Supprimé." : "Suppression impossible."); show(); }))));
 }
@@ -114,7 +114,7 @@ function form(res, row) {
     if (fd.type === "textarea" || fd.type === "lines") inp = h("textarea", { name: fd.name, rows: fd.type === "lines" ? 5 : 4, value: fd.type === "lines" ? (v || []).join("\n") : (v || "") });
     else if (fd.type === "select") { inp = h("select", { name: fd.name }); fd.options.forEach(([k, l]) => inp.append(h("option", { value: k, selected: k === v }, l))); }
     else if (fd.type === "bool") inp = h("input", { type: "checkbox", name: fd.name, checked: row.id ? !!v : fd.name === "published" });
-    else inp = h("input", { type: fd.type === "int" ? "number" : "text", name: fd.name, value: v ?? (fd.type === "int" ? 0 : "") });
+    else inp = h("input", { type: fd.type === "int" ? "number" : "text", name: fd.name, value: v ?? (fd.type === "int" ? 0 : ""), placeholder: fd.type === "url" ? "https://" : "" });
     f.append(h("label", {}, fd.type === "bool" ? "" : fd.label, inp, fd.type === "bool" ? fd.label : ""));
   });
   f.onsubmit = async (e) => {
@@ -122,10 +122,43 @@ function form(res, row) {
     const body = {};
     R.fields.forEach((fd) => { const el = f.elements[fd.name]; body[fd.name] = fd.type === "bool" ? el.checked : fd.type === "int" ? Number(el.value) : el.value; });
     const r = await api(row.id ? `admin?r=${res}&id=${row.id}` : `admin?r=${res}`, { method: row.id ? "PUT" : "POST", headers: J, body: JSON.stringify(body) });
-    if (r.ok) { edit = null; say("Enregistré."); show(); } else { const j = await r.json().catch(() => ({})); say(j.error || "Enregistrement impossible."); }
+    if (r.ok) {
+      if (res === "collaborators" && !row.id) { const j = await r.json(); edit = { ...body, id: j.id }; say("Enregistré. Tu peux maintenant ajouter la photo."); }
+      else { edit = null; say("Enregistré."); }
+      show();
+    } else { const j = await r.json().catch(() => ({})); say(j.error || "Enregistrement impossible."); }
   };
+  if (res === "collaborators" && row.id) f.append(collabPhoto(row));
   f.append(h("button", { type: "submit" }, "Enregistrer"), h("button", { type: "button", onclick: () => { edit = null; show(); } }, "Annuler"));
   return f;
+}
+
+async function toJpeg(f, max) {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(f.type) || f.size > 8e6) throw new Error("format");
+  const bm = await createImageBitmap(f, { imageOrientation: "from-image" });
+  const k = Math.min(1, max / Math.max(bm.width, bm.height)), c = document.createElement("canvas");
+  c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k);
+  c.getContext("2d").drawImage(bm, 0, 0, c.width, c.height);
+  return new Promise((r) => c.toBlob(r, "image/jpeg", 0.86));
+}
+function collabPhoto(row) {
+  const s = h("section", {}, h("h3", {}, "Photo (enregistre d’abord les champs ci-dessus)"));
+  if (row.has_photo) s.append(h("img", { src: `/api/collab-photo?id=${row.id}&v=${Date.now()}`, alt: "Photo actuelle", width: 120 }));
+  s.append(h("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onchange: async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      const b = await toJpeg(f, 600);
+      const r = await api("collab-photo?id=" + row.id, { method: "PUT", headers: BIN, body: b });
+      say(r.ok ? "Photo enregistrée." : "Échec de l’enregistrement (500 Ko maximum).");
+      if (r.ok) { row.has_photo = true; edit = row; show(); }
+    } catch (_) { say("Image illisible (JPEG, PNG ou WebP, 8 Mo maximum)."); }
+  } }));
+  if (row.has_photo) s.append(confirmBtn("Supprimer la photo", async () => {
+    await api("collab-photo?id=" + row.id, { method: "DELETE" });
+    row.has_photo = false; edit = row; say("Photo supprimée."); show();
+  }));
+  return s;
 }
 
 async function settings() {

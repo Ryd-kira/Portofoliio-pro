@@ -86,6 +86,13 @@ summary strong{font-size:19px}
 .cf input:focus,.cf textarea:focus{border-color:var(--cy);outline:0}
 .cf .btn{justify-self:start}
 .hp{position:absolute;left:-9999px}
+.team{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:32px}
+.mem{margin:0}
+.mem .ph{width:100%;aspect-ratio:1/1;border:1px solid var(--line);border-radius:4px;background:var(--panel);margin-bottom:12px;display:grid;place-items:center;color:var(--mut);font-size:32px;font-weight:700}
+.mem img.ph{display:block;object-fit:cover}
+.mem h3{margin:0 0 6px}
+.mem p{margin:0}
+.mem a{margin-right:14px;font-size:15px}
 footer{border-top:1px solid var(--line);padding:28px 0;color:var(--mut);font-size:15px}
 @media(max-width:760px){.hero,.grid2{grid-template-columns:1fr;gap:32px}.row{grid-template-columns:1fr;gap:6px}.photo{width:200px}}
 @media(prefers-reduced-motion:no-preference){
@@ -99,8 +106,8 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--mut);font-siz
 details[open] .det{animation:fade .25s ease}
 @keyframes fade{from{opacity:0}}
 .rv{transform:translateY(28px);transition-duration:.9s}
-.rv .row,.rv details.proj,.rv .chips,.rv .cf,.rv .grid2>div{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .8s cubic-bezier(.2,.7,.2,1);transition-delay:calc(var(--i,0)*80ms + 180ms)}
-.rv.in .row,.rv.in details.proj,.rv.in .chips,.rv.in .cf,.rv.in .grid2>div{opacity:1;transform:none}
+.rv .row,.rv details.proj,.rv .chips,.rv .cf,.rv .grid2>div,.rv .mem{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .8s cubic-bezier(.2,.7,.2,1);transition-delay:calc(var(--i,0)*80ms + 180ms)}
+.rv.in .row,.rv.in details.proj,.rv.in .chips,.rv.in .cf,.rv.in .grid2>div,.rv.in .mem{opacity:1;transform:none}
 .rv h2::after{transform:scaleX(0);transform-origin:left;transition:transform .8s .25s ease}
 .rv.in h2::after{transform:none}
 details.proj{animation:fade .4s ease}
@@ -120,7 +127,7 @@ nav a{transition:color .18s,box-shadow .25s}
 <header><div class="wrap">
 <a class="logo" href="#accueil">Koladé ICHOLA</a>
 <nav aria-label="Navigation principale">
-<a href="#accueil">Accueil</a><a href="#apropos">À propos</a><a href="#competences">Compétences</a><a href="#projets">Projets</a><a href="#parcours">Parcours</a><a href="#contact">Contact</a>
+<a href="#accueil">Accueil</a><a href="#apropos">À propos</a><a href="#competences">Compétences</a><a href="#projets">Projets</a><a href="#collaborateurs" id="navc" hidden>Collaborateurs</a><a href="#parcours">Parcours</a><a href="#contact">Contact</a>
 </nav></div></header>
 
 <main>
@@ -175,6 +182,11 @@ nav a{transition:color .18s,box-shadow .25s}
 <p id="empty" class="mut" hidden>Aucun projet ne correspond à ces filtres. Choisissez « Toutes » ou « Tous ».</p>
 </div></section>
 
+<section id="collaborateurs" hidden><div class="wrap">
+<h2>Collaborateurs</h2>
+<div id="cl" class="team"></div>
+</div></section>
+
 <section id="parcours"><div class="wrap">
 <h2>Expériences et formations</h2>
 <div id="ex"></div>
@@ -227,7 +239,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const KEYS=["realise","prototype","en_developpement","conception","concept"];
 const EXP=[{"label":"Depuis le 12 février 2026","title":"UNIR International, stagiaire technique","desc":"Installation et maintenance de systèmes de vidéosurveillance IP, participation à l’installation et à la maintenance d’équipements de sécurité incendie.","note":"statut actuel à confirmer"},{"label":"En cours","title":"Master AI Data Science, Suprh","desc":"","note":"année à préciser"},{"label":"Diplôme obtenu","title":"Licence Réseaux, Mobilité et Sécurité (RMS), Pigier Bénin","desc":"Cycle de licence terminé. Mémoire soutenu avec la mention Très Bien, en binôme avec Gilles Tokpanou.","note":""},{"label":"Formation en cours","title":"Cisco Networking Academy","desc":"Parcours en réseaux, CyberOps et Ethical Hacking. Il s’agit d’une formation suivie, pas d’une certification obtenue.","note":""},{"label":"Apprentissage","title":"Hack The Box","desc":"Pratique sur les environnements Linux et la cybersécurité.","note":""},{"label":"Parcours antérieur","title":"Baccalauréat série D, Collège privé Saint-Laurent, 2022/2023","desc":"BEPC, Collège privé Saint-Laurent, 2019/2020\nCEP, École Espoir 2000, 2014/2015","note":""},{"label":"Langues","title":"Français, langue maternelle","desc":"Anglais : niveau à confirmer","note":""}];
-let CUR={SK,PROJ,EXP},fc="",fs=-1;
+let CUR={SK,PROJ,EXP,TEAM:[]},fc="",fs=-1;
 const tbc=t=>t?`<span class="tbc">${esc(t)}</span>`:"";
 const renderSk=()=>{$("sk").innerHTML=CUR.SK.map(([g,l])=>`<div class="row"><h3>${esc(g)}</h3><div>${l.map(([n,v,t])=>`<p><strong>${esc(n)}</strong> <span class="mut">${esc(v)}</span>${t?tbc("à préciser"):""}</p>`).join("")}</div></div>`).join("")};
 const renderEx=()=>{$("ex").innerHTML=CUR.EXP.map(e=>`<div class="row"><h3>${esc(e.label)}</h3><div><p><strong>${esc(e.title)}</strong>${tbc(e.note)}</p>${e.desc?`<p class="mut">${esc(e.desc).replace(/\n/g,"<br>")}</p>`:""}</div></div>`).join("")};
@@ -236,9 +248,11 @@ function list(){const a=CUR.PROJ.filter(p=>(!fc||p.c===fc)&&(fs<0||p.s===fs));$(
 const btn=(l,on,k,v)=>`<button type="button" class="chip" aria-pressed="${on}" data-k="${k}" data-v="${esc(v)}">${esc(l)}</button>`;
 function chips(){fc="";fs=-1;$("fc").innerHTML=btn("Toutes",true,"c","")+[...new Set(CUR.PROJ.map(p=>p.c))].map(c=>btn(c,false,"c",c)).join("");$("fs").innerHTML=btn("Tous",true,"s",-1)+[...new Set(CUR.PROJ.map(p=>p.s))].sort().map(s=>btn(S[s],false,"s",s)).join("")}
 document.addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;b.parentNode.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b));if(b.dataset.k==="c")fc=b.dataset.v;else fs=+b.dataset.v;list()});
-const renderAll=()=>{renderSk();renderEx();chips();list()};
+const isHttps=u=>typeof u==="string"&&u.startsWith("https://");
+const renderTeam=()=>{const t=CUR.TEAM;$("collaborateurs").hidden=!t.length;$("navc").hidden=!t.length;$("cl").innerHTML=t.map(m=>{const nm=`${m.first_name} ${m.last_name}`;const ln=[["LinkedIn",m.linkedin_url],["Portfolio",m.portfolio_url],["GitHub",m.github_url]].filter(x=>isHttps(x[1])).map(x=>`<a href="${esc(x[1])}" target="_blank" rel="noopener noreferrer">${x[0]}</a>`).join("");const pic=m.has_photo?`<img class="ph" src="/api/collab-photo?id=${encodeURIComponent(m.id)}&v=${encodeURIComponent(m.photo_v)}" alt="Portrait de ${esc(nm)}" loading="lazy">`:`<div class="ph" aria-hidden="true">${esc((m.first_name[0]||"")+(m.last_name[0]||""))}</div>`;return `<figure class="mem">${pic}<h3>${esc(nm)}</h3><p>${ln}</p></figure>`}).join("")};
+const renderAll=()=>{renderSk();renderEx();chips();list();renderTeam()};
 function applySettings(s){document.querySelectorAll("[data-s]").forEach(el=>{const v=s[el.dataset.s];if(!v)return;if(el.dataset.multi)el.replaceChildren(...v.split(/\n\s*\n/).map(t=>{const p=document.createElement("p");p.textContent=t.trim();return p}));else el.textContent=v})}
-async function loadContent(){try{const r=await Promise.race([fetch(CFG.api+"/content"),new Promise((_,no)=>setTimeout(no,2500))]);if(!r.ok)throw 0;const d=await r.json();if(!d.settings||!d.settings.seeded)throw 0;const gs=[],ix={};d.skills.forEach(s=>{if(!(s.group_name in ix)){ix[s.group_name]=gs.length;gs.push([s.group_name,[]])}gs[ix[s.group_name]][1].push([s.name,s.level,s.to_clarify?1:0])});CUR={SK:gs,PROJ:d.projects.map(p=>({n:p.name,c:p.category,s:KEYS.indexOf(p.status),ok:p.confirmed?1:0,r:p.summary,d:p.details||[],t:p.technologies||""})),EXP:d.experiences.map(x=>({label:x.label,title:x.title,desc:x.description||"",note:x.note||""}))};applySettings(d.settings)}catch(_){}renderAll()}
+async function loadContent(){try{const r=await Promise.race([fetch(CFG.api+"/content"),new Promise((_,no)=>setTimeout(no,2500))]);if(!r.ok)throw 0;const d=await r.json();CUR.TEAM=Array.isArray(d.collaborators)?d.collaborators:[];if(!d.settings||!d.settings.seeded)throw 0;const gs=[],ix={};d.skills.forEach(s=>{if(!(s.group_name in ix)){ix[s.group_name]=gs.length;gs.push([s.group_name,[]])}gs[ix[s.group_name]][1].push([s.name,s.level,s.to_clarify?1:0])});CUR={TEAM:CUR.TEAM,SK:gs,PROJ:d.projects.map(p=>({n:p.name,c:p.category,s:KEYS.indexOf(p.status),ok:p.confirmed?1:0,r:p.summary,d:p.details||[],t:p.technologies||""})),EXP:d.experiences.map(x=>({label:x.label,title:x.title,desc:x.description||"",note:x.note||""}))};applySettings(d.settings)}catch(_){}renderAll()}
 loadContent();
 /* CV : le bouton devient un lien dès que CFG.cv est renseigné */
 const setCv=u=>{const a=document.createElement("a");a.className="btn";a.href=u;a.download="";a.textContent="Télécharger mon CV";$("cv").replaceWith(a)};
