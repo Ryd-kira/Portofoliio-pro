@@ -58,6 +58,22 @@ export const RESOURCES = {
       published,
     ],
   },
+  collaborators: {
+    label: "Collaborateurs",
+    table: "collaborators",
+    title: ["first_name", "last_name"],
+    order: "position, created_at",
+    list: "SELECT c.*, (p.collaborator_id IS NOT NULL) AS has_photo FROM collaborators c LEFT JOIN collaborator_photos p ON p.collaborator_id = c.id ORDER BY c.position, c.created_at",
+    fields: [
+      f("first_name", "Prénom", "text", { max: 60, required: true }),
+      f("last_name", "Nom", "text", { max: 60, required: true }),
+      f("linkedin_url", "Lien LinkedIn", "url", { max: 300, host: "linkedin.com" }),
+      f("portfolio_url", "Lien portfolio", "url", { max: 300 }),
+      f("github_url", "Lien GitHub", "url", { max: 300, host: "github.com" }),
+      position,
+      published,
+    ],
+  },
 };
 
 // [clé, libellé, type, longueur max]
@@ -84,6 +100,17 @@ export function clean(name, body) {
     if (fd.type === "lines") {
       const arr = (Array.isArray(v) ? v : String(v || "").split("\n")).map((s) => String(s).trim()).filter(Boolean);
       if (arr.length > fd.items || arr.some((s) => s.length > fd.max)) errors.push(fd.label); else out[fd.name] = arr;
+      continue;
+    }
+    if (fd.type === "url") {
+      // Seuls les liens https:// sont acceptés (jamais javascript: ni http:).
+      let s = String(v ?? "").trim();
+      if (!s) { out[fd.name] = null; continue; }
+      if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = "https://" + s;
+      let u;
+      try { u = new URL(s); } catch { errors.push(fd.label); continue; }
+      const hostOk = !fd.host || u.hostname === fd.host || u.hostname.endsWith("." + fd.host);
+      if (u.protocol !== "https:" || !hostOk || /\s/.test(s) || u.href.length > fd.max) errors.push(fd.label); else out[fd.name] = u.href;
       continue;
     }
     const s = String(v ?? "").trim();

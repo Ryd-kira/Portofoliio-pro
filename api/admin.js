@@ -70,7 +70,7 @@ export default async function handler(req, res) {
   if (!R) return res.status(404).end();
 
   if (req.method === "GET") {
-    const rows = await sql.query(`SELECT * FROM ${R.table} ORDER BY ${R.order}`);
+    const rows = await sql.query(R.list || `SELECT * FROM ${R.table} ORDER BY ${R.order}`);
     return res.status(200).json(rows);
   }
 
@@ -78,8 +78,8 @@ export default async function handler(req, res) {
     const { out, errors } = clean(r, req.body || {});
     if (errors.length) return res.status(400).json({ error: "Champ invalide : " + errors.join(", ") });
     if (req.method === "POST") {
-      await insertQ(R, out);
-      return res.status(201).end();
+      const created = await insertQ(R, out);
+      return res.status(201).json({ id: created[0].id });
     }
     if (!UUID.test(String(id))) return res.status(400).end();
     const cols = Object.keys(out);
