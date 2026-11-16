@@ -27,7 +27,7 @@ const KEYS=["realise","prototype","en_developpement","conception","concept"];
 const EXP=[{"label":"Depuis le 12 février 2026","title":"UNIR International, stagiaire technique","desc":"Installation et maintenance de systèmes de vidéosurveillance IP, participation à l’installation et à la maintenance d’équipements de sécurité incendie.","note":"statut actuel à confirmer"},{"label":"En cours","title":"Master AI Data Science, Suprh","desc":"","note":"année à préciser"},{"label":"Diplôme obtenu","title":"Licence Réseaux, Mobilité et Sécurité (RMS), Pigier Bénin","desc":"Cycle de licence terminé. Mémoire soutenu avec la mention Très Bien, en binôme avec Gilles Tokpanou.","note":""},{"label":"Formation en cours","title":"Cisco Networking Academy","desc":"Parcours en réseaux, CyberOps et Ethical Hacking. Il s’agit d’une formation suivie, pas d’une certification obtenue.","note":""},{"label":"Apprentissage","title":"Hack The Box","desc":"Pratique sur les environnements Linux et la cybersécurité.","note":""},{"label":"Parcours antérieur","title":"Baccalauréat série D, Collège privé Saint-Laurent, 2022/2023","desc":"BEPC, Collège privé Saint-Laurent, 2019/2020\nCEP, École Espoir 2000, 2014/2015","note":""},{"label":"Langues","title":"Français, langue maternelle","desc":"Anglais : niveau à confirmer","note":""}];
 let CUR={SK,PROJ,EXP,TEAM:[]},fc="",fs=-1;
 const tbc=t=>t?`<span class="tbc">${esc(t)}</span>`:"";
-const renderSk=()=>{$("sk").innerHTML=CUR.SK.map(([g,l])=>`<div class="row"><h3>${esc(g)}</h3><div>${l.map(([n,v,t])=>`<p><strong>${esc(n)}</strong> <span class="mut">${esc(v)}</span>${t?tbc("à préciser"):""}</p>`).join("")}</div></div>`).join("")};
+const renderSk=()=>{$("sk").innerHTML=CUR.SK.map(([g,l])=>`<article class="sk-card"><h3>${esc(g)}</h3><ul>${l.map(([n,v,t])=>`<li><strong>${esc(n)}</strong> <span class="mut">${esc(v)}</span>${t?tbc("à préciser"):""}</li>`).join("")}</ul></article>`).join("")};
 const renderEx=()=>{$("ex").innerHTML=CUR.EXP.map(e=>`<div class="row"><h3>${esc(e.label)}</h3><div><p><strong>${esc(e.title)}</strong>${tbc(e.note)}</p>${e.desc?`<p class="mut">${esc(e.desc).replace(/\n/g,"<br>")}</p>`:""}</div></div>`).join("")};
 const card=p=>`<details class="proj"><summary><span><strong>${esc(p.n)}</strong>${p.ok?"":tbc("état à confirmer")}<br><span class="mut">${esc(p.c)}</span></span><span class="st" style="--c:${COL[p.s]||COL[4]}">${esc(S[p.s]||"")}</span></summary><div class="det"><p>${esc(p.r)}</p>${p.d.map(x=>`<p>${esc(x)}</p>`).join("")}${p.t?`<p>Technologies : ${esc(p.t)}</p>`:""}</div></details>`;
 function list(){const a=CUR.PROJ.filter(p=>(!fc||p.c===fc)&&(fs<0||p.s===fs));$("pl").innerHTML=a.map(card).join("");$("empty").hidden=a.length>0}
@@ -36,7 +36,8 @@ function chips(){fc="";fs=-1;$("fc").innerHTML=btn("Toutes",true,"c","")+[...new
 document.addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;b.parentNode.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b));if(b.dataset.k==="c")fc=b.dataset.v;else fs=+b.dataset.v;list()});
 const isHttps=u=>typeof u==="string"&&u.startsWith("https://");
 const renderTeam=()=>{const t=CUR.TEAM;$("collaborateurs").hidden=!t.length;$("navc").hidden=!t.length;$("cl").innerHTML=t.map(m=>{const nm=`${m.first_name} ${m.last_name}`;const ln=[["LinkedIn",m.linkedin_url],["Portfolio",m.portfolio_url],["GitHub",m.github_url]].filter(x=>isHttps(x[1])).map(x=>`<a href="${esc(x[1])}" target="_blank" rel="noopener noreferrer">${x[0]}</a>`).join(" ");const pic=m.has_photo?`<img class="ph" src="/api/collab-photo?id=${encodeURIComponent(m.id)}&v=${encodeURIComponent(m.photo_v)}" alt="Portrait de ${esc(nm)}" loading="lazy">`:`<div class="ph" aria-hidden="true">${esc((m.first_name[0]||"")+(m.last_name[0]||""))}</div>`;return `<figure class="mem">${pic}<h3>${esc(nm)}</h3><p>${ln}</p></figure>`}).join("")};
-const renderAll=()=>{renderSk();renderEx();chips();list();renderTeam()};
+function stagger(){document.querySelectorAll("section").forEach(s=>s.querySelectorAll(".sk-card,.mem,#ex .row,details.proj").forEach((n,i)=>n.style.setProperty("--i",Math.min(i,9))))}
+const renderAll=()=>{renderSk();renderEx();chips();list();renderTeam();stagger()};
 function applySettings(s){document.querySelectorAll("[data-s]").forEach(el=>{const v=s[el.dataset.s];if(!v)return;if(el.dataset.multi)el.replaceChildren(...v.split(/\n\s*\n/).map(t=>{const p=document.createElement("p");p.textContent=t.trim();return p}));else el.textContent=v})}
 async function loadContent(){try{const r=await Promise.race([fetch(CFG.api+"/content"),new Promise((_,no)=>setTimeout(no,2500))]);if(!r.ok)throw 0;const d=await r.json();CUR.TEAM=Array.isArray(d.collaborators)?d.collaborators:[];if(!d.settings||!d.settings.seeded)throw 0;const gs=[],ix={};d.skills.forEach(s=>{if(!(s.group_name in ix)){ix[s.group_name]=gs.length;gs.push([s.group_name,[]])}gs[ix[s.group_name]][1].push([s.name,s.level,s.to_clarify?1:0])});CUR={TEAM:CUR.TEAM,SK:gs,PROJ:d.projects.map(p=>({n:p.name,c:p.category,s:KEYS.indexOf(p.status),ok:p.confirmed?1:0,r:p.summary,d:p.details||[],t:p.technologies||""})),EXP:d.experiences.map(x=>({label:x.label,title:x.title,desc:x.description||"",note:x.note||""}))};applySettings(d.settings)}catch(_){}renderAll()}
 loadContent();
@@ -61,3 +62,15 @@ if("IntersectionObserver"in window){const links=[...document.querySelectorAll("n
 const mb=$("mbtn"),nv=$("nav");
 mb.onclick=()=>{const o=nv.classList.toggle("open");mb.setAttribute("aria-expanded",String(o))};
 nv.addEventListener("click",e=>{if(e.target.closest("a")){nv.classList.remove("open");mb.setAttribute("aria-expanded","false")}});
+/* Compétences : diaporama automatique, pausable */
+const trk=$("sk"),cp=$("cplay");
+let play=!matchMedia("(prefers-reduced-motion: reduce)").matches,timer;
+const step=d=>{const c=trk.firstElementChild;if(!c)return;const w=c.getBoundingClientRect().width+16,max=trk.scrollWidth-trk.clientWidth;let x=trk.scrollLeft+d*w;if(d>0&&trk.scrollLeft>=max-4)x=0;if(d<0&&trk.scrollLeft<=4)x=max;trk.scrollTo({left:x,behavior:"smooth"})};
+const arm=()=>{clearInterval(timer);if(play)timer=setInterval(()=>{if(!document.hidden)step(1)},4200)};
+const lab=()=>{cp.textContent=play?"Pause":"Lecture";cp.setAttribute("aria-pressed",String(play))};
+cp.onclick=()=>{play=!play;lab();arm()};
+$("cprev").onclick=()=>{step(-1);arm()};
+$("cnext").onclick=()=>{step(1);arm()};
+["mouseenter","focusin","touchstart"].forEach(e=>trk.addEventListener(e,()=>clearInterval(timer),{passive:true}));
+["mouseleave","focusout","touchend"].forEach(e=>trk.addEventListener(e,arm,{passive:true}));
+lab();arm();
