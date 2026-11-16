@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Hachage du mot de passe</title>
+<style>
+:root{--bg:#090c11;--panel:#10151c;--line:#232b36;--text:#ebe8e1;--mut:#9ca6b3;--acc:#4f8cff;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:32px 20px}
+h1{font-size:26px;margin:0 0 12px}
+p{margin:0 0 14px}
+.mut{color:var(--mut)}
+input,textarea,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;width:100%}
+textarea{height:7rem;resize:vertical;margin-top:12px}
+button{cursor:pointer;width:auto;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>Hachage du mot de passe administrateur</h1>
+<p class="mut">Le calcul se fait dans ton navigateur : le mot de passe n’est envoyé nulle part. Copie le résultat dans la variable <strong>ADMIN_PASSWORD_HASH</strong> de Vercel, puis supprime l’ancienne variable <strong>ADMIN_PASSWORD</strong> et redéploie.</p>
+<label for="pw">Nouveau mot de passe (12 caractères minimum, long et unique)</label>
+<input id="pw" type="password" autocomplete="new-password">
+<button type="button" id="go">Calculer le hachage</button>
+<p id="st" class="mut" role="status"></p>
+<textarea id="out" readonly aria-label="Hachage à copier"></textarea>
+</main>
+<script src="/hash.js" defer></script>
+</body>
+</html>

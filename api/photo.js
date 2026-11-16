@@ -1,3 +1,3 @@
-import { fileHandler } from "./_file.js";
+import { fileHandler } from "../lib/files.js";
 
 export default fileHandler("photo");

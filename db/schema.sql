@@ -104,3 +104,31 @@ ALTER TABLE public.collaborator_photos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY app_collaborators ON public.collaborators FOR ALL TO portfolio_app USING (true) WITH CHECK (true);
 CREATE POLICY app_collaborator_photos ON public.collaborator_photos FOR ALL TO portfolio_app USING (true) WITH CHECK (true);
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.collaborators, public.collaborator_photos TO portfolio_app;
+
+-- Sécurité : sessions administrateur révocables et journal des événements suspects
+CREATE TABLE public.admin_sessions (
+  token_hash text PRIMARY KEY CHECK (char_length(token_hash) = 64),
+  csrf text NOT NULL CHECK (char_length(csrf) BETWEEN 20 AND 64),
+  ip_hash text CHECK (ip_hash IS NULL OR char_length(ip_hash) <= 64),
+  user_agent text CHECK (user_agent IS NULL OR char_length(user_agent) <= 200),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_seen timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL
+);
+CREATE INDEX admin_sessions_expires_idx ON public.admin_sessions (expires_at);
+CREATE TABLE public.security_events (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  at timestamptz NOT NULL DEFAULT now(),
+  kind text NOT NULL CHECK (char_length(kind) BETWEEN 1 AND 40),
+  ip_hash text CHECK (ip_hash IS NULL OR char_length(ip_hash) <= 64),
+  path text CHECK (path IS NULL OR char_length(path) <= 120),
+  detail text CHECK (detail IS NULL OR char_length(detail) <= 300)
+);
+CREATE INDEX security_events_kind_ip_at_idx ON public.security_events (kind, ip_hash, at DESC);
+CREATE INDEX security_events_at_idx ON public.security_events (at DESC);
+ALTER TABLE public.admin_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.security_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY app_admin_sessions ON public.admin_sessions FOR ALL TO portfolio_app USING (true) WITH CHECK (true);
+CREATE POLICY app_security_events ON public.security_events FOR ALL TO portfolio_app USING (true) WITH CHECK (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_sessions TO portfolio_app;
+GRANT SELECT, INSERT, DELETE ON public.security_events TO portfolio_app;

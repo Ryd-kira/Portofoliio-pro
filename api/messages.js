@@ -1,7 +1,7 @@
-import { sql, isAdmin, sameOrigin } from "./_lib.js";
+import { secure, sql, requireAdmin } from "../lib/core.js";
 
-export default async function handler(req, res) {
-  if (!isAdmin(req)) return res.status(401).end();
+export default secure(["GET", "PATCH"], async (req, res) => {
+  if (!(await requireAdmin(req, res, { write: req.method === "PATCH" }))) return;
 
   if (req.method === "GET") {
     const rows = await sql`
@@ -11,15 +11,10 @@ export default async function handler(req, res) {
     return res.status(200).json(rows);
   }
 
-  if (req.method === "PATCH") {
-    if (!sameOrigin(req)) return res.status(403).end();
-    const { id, status } = req.body || {};
-    if (!["read", "archived"].includes(status) || !/^[0-9a-f-]{36}$/.test(String(id))) {
-      return res.status(400).end();
-    }
-    await sql`UPDATE messages SET status = ${status} WHERE id = ${id}::uuid`;
-    return res.status(204).end();
+  const { id, status } = req.body || {};
+  if (!["read", "archived"].includes(status) || !/^[0-9a-f-]{36}$/.test(String(id))) {
+    return res.status(400).json({ error: "Requête invalide" });
   }
-
-  return res.status(405).end();
-}
+  await sql`UPDATE messages SET status = ${status} WHERE id = ${id}::uuid`;
+  return res.status(204).end();
+});

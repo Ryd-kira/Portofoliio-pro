@@ -1,6 +1,6 @@
-import { sql, isAdmin, sameOrigin } from "./_lib.js";
-import { RESOURCES, SETTINGS, clean } from "./_schema.js";
-import { DEFAULTS } from "./_defaults.js";
+import { secure, sql, env, requireAdmin, logEvent, clearCookie } from "../lib/core.js";
+import { RESOURCES, SETTINGS, clean } from "../lib/schema.js";
+import { DEFAULTS } from "../lib/defaults.js";
 
 const UUID = /^[0-9a-f-]{36}$/;
 
@@ -13,18 +13,36 @@ const insertQ = (R, row) => {
   );
 };
 
-export default async function handler(req, res) {
-  if (!isAdmin(req)) return res.status(401).end();
-  const { r, id } = req.query;
+export default secure(["GET", "POST", "PUT", "DELETE"], async (req, res) => {
+  if (!(await requireAdmin(req, res, { write: req.method !== "GET" }))) return;
+  const r = String(req.query.r ?? "");
+  const id = String(req.query.id ?? "");
 
   if (r === "meta") {
+    if (req.method !== "GET") return res.status(405).json({ error: "Méthode non autorisée" });
     const resources = Object.fromEntries(
       Object.entries(RESOURCES).map(([k, v]) => [k, { label: v.label, title: v.title, fields: v.fields }])
     );
     return res.status(200).json({ resources, settings: SETTINGS });
   }
 
-  if (req.method !== "GET" && !sameOrigin(req)) return res.status(403).end();
+  if (r === "security") {
+    if (req.method !== "GET") return res.status(405).json({ error: "Méthode non autorisée" });
+    const [events, counts, sessions] = await Promise.all([
+      sql`SELECT at, kind, left(ip_hash, 8) AS ip, path, detail FROM security_events ORDER BY at DESC LIMIT 100`,
+      sql`SELECT kind, count(*)::int AS n FROM security_events WHERE at > now() - interval '24 hours' GROUP BY kind ORDER BY n DESC`,
+      sql`SELECT count(*)::int AS n FROM admin_sessions WHERE expires_at > now()`,
+    ]);
+    return res.status(200).json({ events, counts, sessions: sessions[0].n, legacyPassword: !!env().legacyPassword });
+  }
+
+  if (r === "sessions") {
+    if (req.method !== "DELETE") return res.status(405).json({ error: "Méthode non autorisée" });
+    await sql`DELETE FROM admin_sessions`;
+    await logEvent(req, "sessions_revoquees");
+    res.setHeader("Set-Cookie", clearCookie());
+    return res.status(204).end();
+  }
 
   if (r === "settings") {
     if (req.method === "GET") {
@@ -32,7 +50,7 @@ export default async function handler(req, res) {
       return res.status(200).json(Object.fromEntries(rows.map((x) => [x.key, x.value])));
     }
     if (req.method === "PUT") {
-      const values = (req.body && req.body.values) || {};
+      const values = (req.body && typeof req.body.values === "object" && req.body.values) || {};
       const qs = [];
       for (const [key, , , max] of SETTINGS) {
         if (!(key in values)) continue;
@@ -47,11 +65,11 @@ export default async function handler(req, res) {
       if (qs.length) await sql.transaction(qs);
       return res.status(204).end();
     }
-    return res.status(405).end();
+    return res.status(405).json({ error: "Méthode non autorisée" });
   }
 
   if (r === "seed") {
-    if (req.method !== "POST") return res.status(405).end();
+    if (req.method !== "POST") return res.status(405).json({ error: "Méthode non autorisée" });
     const done = await sql`SELECT 1 FROM settings WHERE key = 'seeded'`;
     if (done.length) return res.status(409).json({ error: "Contenu déjà importé" });
     const qs = [];
@@ -66,8 +84,9 @@ export default async function handler(req, res) {
     return res.status(201).json({ success: true });
   }
 
-  const R = RESOURCES[r];
-  if (!R) return res.status(404).end();
+  // Seulement les ressources déclarées (évite « constructor », « __proto__ », etc.).
+  const R = Object.hasOwn(RESOURCES, r) ? RESOURCES[r] : null;
+  if (!R) return res.status(404).json({ error: "Ressource inconnue" });
 
   if (req.method === "GET") {
     const rows = await sql.query(R.list || `SELECT * FROM ${R.table} ORDER BY ${R.order}`);
@@ -75,26 +94,22 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "POST" || req.method === "PUT") {
-    const { out, errors } = clean(r, req.body || {});
+    const { out, errors } = clean(r, req.body && typeof req.body === "object" ? req.body : {});
     if (errors.length) return res.status(400).json({ error: "Champ invalide : " + errors.join(", ") });
     if (req.method === "POST") {
       const created = await insertQ(R, out);
       return res.status(201).json({ id: created[0].id });
     }
-    if (!UUID.test(String(id))) return res.status(400).end();
+    if (!UUID.test(id)) return res.status(400).json({ error: "Identifiant invalide" });
     const cols = Object.keys(out);
     const rows = await sql.query(
       `UPDATE ${R.table} SET ${cols.map((c, i) => `${c} = $${i + 1}`).join(", ")}, updated_at = now() WHERE id = $${cols.length + 1}::uuid RETURNING id`,
       [...cols.map((c) => out[c]), id]
     );
-    return rows.length ? res.status(204).end() : res.status(404).end();
+    return rows.length ? res.status(204).end() : res.status(404).json({ error: "Introuvable" });
   }
 
-  if (req.method === "DELETE") {
-    if (!UUID.test(String(id))) return res.status(400).end();
-    await sql.query(`DELETE FROM ${R.table} WHERE id = $1::uuid`, [id]);
-    return res.status(204).end();
-  }
-
-  return res.status(405).end();
-}
+  if (!UUID.test(id)) return res.status(400).json({ error: "Identifiant invalide" });
+  await sql.query(`DELETE FROM ${R.table} WHERE id = $1::uuid`, [id]);
+  return res.status(204).end();
+});

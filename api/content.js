@@ -1,8 +1,7 @@
-import { sql } from "./_lib.js";
+import { secure, sql } from "../lib/core.js";
 
 // Contenu public du site : uniquement les éléments marqués « visibles ».
-export default async function handler(req, res) {
-  if (req.method !== "GET") return res.status(405).end();
+export default secure(["GET"], async (req, res) => {
   const [projects, skills, experiences, collaborators, st] = await Promise.all([
     sql`SELECT name, category, status, summary, details, technologies, confirmed FROM projects WHERE published ORDER BY position, created_at`,
     sql`SELECT group_name, name, level, to_clarify FROM skills WHERE published ORDER BY position, created_at`,
@@ -15,8 +14,9 @@ export default async function handler(req, res) {
     sql`SELECT key, value FROM settings`,
   ]);
   res.setHeader("Cache-Control", "public, s-maxage=15, stale-while-revalidate=60");
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
   return res.status(200).json({
     projects, skills, experiences, collaborators,
     settings: Object.fromEntries(st.map((r) => [r.key, r.value])),
   });
-}
+});
